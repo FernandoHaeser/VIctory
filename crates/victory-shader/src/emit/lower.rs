@@ -1468,7 +1468,9 @@ impl<'a> Lower<'a> {
 
     /// The median of three. With a NaN among them the hardware gives the
     /// minimum of the three instead (the host's minimum skips NaNs, so that
-    /// is the smallest number among them).
+    /// is the smallest number among them). The NaN test is on the bits: a
+    /// float `uno` compare beside the min/max was folded away by the NVIDIA
+    /// driver, which then returned the median, `med3(1, 2, NaN) = 2`.
     fn med3(&mut self, a: V, b: V, third: V) -> V {
         let c = self.cur;
         let lo = self.binary(36, a, b);
@@ -1476,10 +1478,23 @@ impl<'a> Lower<'a> {
         let t = self.binary(36, hi, third);
         let median = self.binary(35, lo, t);
         let least = self.binary(36, lo, third);
-        let ab = self.s.m.cmp(c, pred::UNO, a, b);
-        let nan3 = self.s.m.cmp(c, pred::UNO, third, third);
-        let nan = self.s.m.bin(c, Bin::Or, ab, nan3);
+        let na = self.is_nan_bits(a);
+        let nb = self.is_nan_bits(b);
+        let nc = self.is_nan_bits(third);
+        let ab = self.s.m.bin(c, Bin::Or, na, nb);
+        let nan = self.s.m.bin(c, Bin::Or, ab, nc);
         self.s.m.select(c, nan, least, median)
+    }
+
+    /// Whether f32 `x` is a NaN, tested on its bits (exponent all ones,
+    /// mantissa not zero), which host compilers cannot fold as fast math.
+    fn is_nan_bits(&mut self, x: V) -> V {
+        let c = self.cur;
+        let bits = self.as_int(x);
+        let abs = self.s.m.i32(0x7FFF_FFFF);
+        let inf = self.s.m.i32(0x7F80_0000);
+        let m = self.s.m.bin(c, Bin::And, bits, abs);
+        self.s.m.cmp(c, pred::IUGT, m, inf)
     }
 
     /// `a - floor(a)`, which on the hardware never reaches 1.0: where it
