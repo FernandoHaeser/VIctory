@@ -107,6 +107,15 @@ impl Shader {
     pub(crate) fn translated(&self) -> Option<&Translated> {
         self.translated
             .get_or_init(|| {
+                // Diagnostics: the container as `<hash>.bin` in
+                // `VICTORY_SHADER_DUMP`, for `victory shader-info --disasm`.
+                #[cfg(feature = "diagnostics")]
+                if let Some(dir) = std::env::var_os("VICTORY_SHADER_DUMP") {
+                    let path = std::path::Path::new(&dir).join(format!("{}.bin", self.hash));
+                    if let Err(e) = std::fs::write(&path, &self.container) {
+                        tracing::warn!(error = %e, ?path, "shader not dumped");
+                    }
+                }
                 let done = translate(&self.container);
                 match &done {
                     Ok(t) => tracing::info!(

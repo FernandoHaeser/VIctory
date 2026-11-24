@@ -1144,7 +1144,20 @@ mod host {
                 return None;
             }
             self.empty_until[slot] = None;
-            Some(convert(&state.Gamepad))
+            #[allow(unused_mut)]
+            let mut pad = convert(&state.Gamepad);
+            // Scripted keys press their stand-in buttons on the first host
+            // pad too: with a pad connected there is no stand-in, and the
+            // title's "press A" screen reads pads only.
+            #[cfg(feature = "diagnostics")]
+            if slot == 0 {
+                for vk in scripted() {
+                    if let Some(&(_, bit)) = FALLBACK_BUTTONS.iter().find(|(k, _)| *k == vk) {
+                        pad.buttons |= bit;
+                    }
+                }
+            }
+            Some(pad)
         }
 
         fn keys(&mut self) -> Vec<KeyState> {
